@@ -109,6 +109,7 @@
       (exit 0))
     (begin
       (display-findings findings format verbose?)
+      (display-summary findings)
       (exit 1))))
 
 (def (cmd-pre-commit config format verbose?)

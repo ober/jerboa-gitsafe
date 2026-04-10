@@ -24,27 +24,25 @@
 
   ;; Shannon entropy of a string (bits per character).
   ;; Returns a flonum in [0.0, ~6.0] for printable ASCII.
+  ;; Safe for Unicode — uses hash table for frequency counts.
   (def (shannon-entropy str)
     (let ([len (string-length str)])
       (if (= len 0)
         0.0
-        (let ([freqs (make-vector 256 0)])
+        (let ([freqs (make-hash-table)])
           ;; Count character frequencies
           (let loop ([i 0])
             (when (< i len)
               (let ([b (char->integer (string-ref str i))])
-                (vector-set! freqs b (+ 1 (vector-ref freqs b))))
+                (hash-put! freqs b (+ 1 (hash-ref freqs b 0))))
               (loop (+ i 1))))
           ;; Calculate entropy: sum of -p*log2(p)
           (let ([n (inexact len)])
-            (let loop ([i 0] [entropy 0.0])
-              (if (>= i 256)
+            (let loop ([vals (hash-values freqs)] [entropy 0.0])
+              (if (null? vals)
                 entropy
-                (let ([count (vector-ref freqs i)])
-                  (if (= count 0)
-                    (loop (+ i 1) entropy)
-                    (let ([p (/ (inexact count) n)])
-                      (loop (+ i 1) (- entropy (* p (log p 2))))))))))))))
+                (let ([p (/ (inexact (car vals)) n)])
+                  (loop (cdr vals) (- entropy (* p (log p 2))))))))))))
 
   ;; Check if a string exceeds the entropy threshold.
   (def (high-entropy? str (threshold *entropy-threshold-generic*))

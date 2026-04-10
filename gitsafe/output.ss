@@ -159,7 +159,6 @@
       ["json"
        (display-findings-json findings)]
       [_
-       (display-findings-text findings verbose?)
-       (display-summary findings)]))
+       (display-findings-text findings verbose?)]))
 
 ) ;; end library
