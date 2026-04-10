@@ -1,3 +1,5 @@
 gitsafe-bin
+gitsafe-musl
+gitsafe-musl.sha256
 *.so
 *.wpo
