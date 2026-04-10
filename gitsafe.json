@@ -1,0 +1,27 @@
+{
+  "severity": "medium",
+  "entropy": true,
+  "patterns": {
+    "disabled": [],
+    "custom": []
+  },
+  "exclude": [
+    "*.lock",
+    "go.sum",
+    "*.md",
+    "vendor/**",
+    "node_modules/**",
+    "*.min.js",
+    "*.min.css",
+    "test/fixtures/**"
+  ],
+  "allowlist": {
+    "files": [],
+    "patterns": [
+      "EXAMPLE_KEY",
+      "YOUR_API_KEY_HERE",
+      "fake_secret_for_testing",
+      "XXXXXX"
+    ]
+  }
+}

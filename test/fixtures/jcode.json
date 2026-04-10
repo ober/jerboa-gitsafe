@@ -1,0 +1,13 @@
+{
+  "providers": {
+    "anthropic": {
+      "api_key": "sk-ant-api03-FAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKE"
+    },
+    "openai": {
+      "api_key": "sk-proj-FAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKEfake"
+    },
+    "github": {
+      "token": "ghp_FAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKEfake"
+    }
+  }
+}

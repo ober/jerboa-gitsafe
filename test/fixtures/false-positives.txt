@@ -1,0 +1,29 @@
+# Known false-positive triggers — gitsafe should NOT flag these.
+
+# Variable named 'password' with env var reference (not a literal)
+password = os.environ["PASSWORD"]
+
+# SHA-256 hash in a comment (known-format context)
+# expected_hash: e3b0c44298fc1c149afbf4c8996fb924
+
+# Example/placeholder values
+api_key = "YOUR_API_KEY_HERE"
+secret = "xxxxxxxxxxxxxxxx"
+token = "<YOUR_TOKEN>"
+
+# URL without credentials
+endpoint = "https://api.example.com/v1/users"
+
+# Short random-looking string (below length threshold)
+id = "a1b2c3d4"
+
+# Localhost URL with user:pass (common in dev configs)
+# gitsafe should have a validator for this
+db = "postgres://postgres:postgres@localhost/mydb"
+
+# Lock file hash (common in package managers — excluded by .lock extension)
+# These would be in package-lock.json which is typically excluded
+integrity = "sha512-abc123def456"
+
+# Test that gitsafe:ignore suppression works
+secret_key = "sk_live_thisshouldbesuppressed"  # gitsafe:ignore
