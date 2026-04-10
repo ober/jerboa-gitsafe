@@ -59,10 +59,12 @@
                       (loop (+ i 1) (- e (* p (log p 2))))))))))))))
 
   (def (not-placeholder? str)
-    ;; Reject common test/example placeholder strings
+    ;; Reject common test/example placeholder strings.
+    ;; Only match placeholder words at word boundaries (start/end or separator)
+    ;; to avoid rejecting real secrets that happen to contain "test" or "fake".
     (not (or (pregexp-match "^[Xx]+$" str)
              (pregexp-match "^[Aa]+$" str)
-             (pregexp-match "(?i:example|placeholder|your[_-]?key|test|fake|dummy|replace)" str)
+             (pregexp-match "(?i:(?:^|[_.-])(?:example|placeholder|dummy|sample|your[_-]?(?:api[_-]?)?key|replace[_-]?me|change[_-]?me|insert[_-]?here)(?:$|[_.-]))" str)
              (string=? str "")
              (< (string-length str) 8))))
 
@@ -127,9 +129,18 @@
       'anthropic-api-key
       "Anthropic API Key"
       'critical
-      (pregexp "sk-ant-(?:api03-)?[A-Za-z0-9_-]{90,200}")
+      (pregexp "sk-ant-(?:[a-z0-9]+-)?[A-Za-z0-9_-]{80,200}")
       (lambda (m) (has-prefix? m "sk-ant-"))
       "Anthropic Claude API Key"))
+
+  (def pat-openai-svcacct-key
+    (make-secret-pattern
+      'openai-svcacct-key
+      "OpenAI Service Account Key"
+      'critical
+      (pregexp "sk-svcacct-[A-Za-z0-9_-]{40,200}")
+      #f
+      "OpenAI Service Account API Key"))
 
   (def pat-stripe-secret
     (make-secret-pattern
@@ -145,9 +156,18 @@
       'private-key-pem
       "Private Key (PEM)"
       'critical
-      (pregexp "-----BEGIN (?:RSA |DSA |EC |OPENSSH |PGP )?PRIVATE KEY-----")
+      (pregexp "-----BEGIN (?:RSA |DSA |EC |OPENSSH |PGP |ENCRYPTED )?PRIVATE KEY-----")
       #f
       "PEM-encoded private key block"))
+
+  (def pat-putty-private-key
+    (make-secret-pattern
+      'putty-private-key
+      "PuTTY Private Key"
+      'critical
+      (pregexp "PuTTY-User-Key-File-[0-9]+:")
+      #f
+      "PuTTY PPK private key file"))
 
   ;; --- HIGH patterns ---
 
@@ -264,10 +284,10 @@
       'basic-auth-url
       "Credentials in URL"
       'high
-      (pregexp "[a-z+]+://([^:@\\s]+):([^:@\\s]+)@[^\\s\"']+")
-      (lambda (m) (not (or (string=? m "localhost")
-                           (string=? m "user")
-                           (string=? m "username"))))
+      (pregexp "[a-z+]+://[^:@\\s]+:[^:@\\s]+@[^\\s\"']+")
+      (lambda (m) (not (pregexp-match
+                         "(?i://(?:user|username|admin|root):(?:pass|password|passwd|secret|changeme|x{3,})@)"
+                         m)))
       "URL with embedded user:password credentials"))
 
   ;; --- MEDIUM patterns ---
@@ -310,9 +330,11 @@
       pat-github-fine-grained
       pat-openai-key
       pat-openai-project-key
+      pat-openai-svcacct-key
       pat-anthropic-key
       pat-stripe-secret
       pat-private-key-pem
+      pat-putty-private-key
       ;; High
       pat-generic-api-key
       pat-generic-secret

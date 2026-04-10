@@ -137,6 +137,30 @@
                          "sk_live_ABCDEFGHIJKLMNOPQRSTUVWXYZabc")
           (lambda (m) m))))
 
+    (test-case "private-key-pem: detects OpenSSH private key"
+      (let ([pat (car (filter (lambda (p) (eq? (secret-pattern-id p) 'private-key-pem))
+                              (all-patterns)))])
+        (check-predicate
+          (pregexp-match (secret-pattern-pregexp pat)
+                         "-----BEGIN OPENSSH PRIVATE KEY-----")
+          (lambda (m) m))))
+
+    (test-case "private-key-pem: detects encrypted private key"
+      (let ([pat (car (filter (lambda (p) (eq? (secret-pattern-id p) 'private-key-pem))
+                              (all-patterns)))])
+        (check-predicate
+          (pregexp-match (secret-pattern-pregexp pat)
+                         "-----BEGIN ENCRYPTED PRIVATE KEY-----")
+          (lambda (m) m))))
+
+    (test-case "putty-private-key: detects PuTTY key file"
+      (let ([pat (car (filter (lambda (p) (eq? (secret-pattern-id p) 'putty-private-key))
+                              (all-patterns)))])
+        (check-predicate
+          (pregexp-match (secret-pattern-pregexp pat)
+                         "PuTTY-User-Key-File-3: ssh-rsa")
+          (lambda (m) m))))
+
   ))
 
 ;; ============================================================
@@ -224,12 +248,56 @@
         (check-equal? #f (skip-file? "config.json" c))
         (check-equal? #f (skip-file? "Makefile" c))))
 
+    (test-case "extract-match: AWS key with boundary chars extracts key only"
+      (let* ([c        (default-config)]
+             [patterns (filter (lambda (p) (eq? (secret-pattern-id p) 'aws-access-key))
+                               (all-patterns))]
+             [findings (scan-line "test.txt" 1
+                         "aws_access_key_id = AKIAIOSFODNN7EXAMPLS"
+                         patterns c)])
+        (check-predicate findings pair?)
+        (check-equal? "AKIAIOSFODNN7EXAMPLS"
+                      (finding-matched-text (car findings)))))
+
+    (test-case "extract-match: generic-secret extracts value not whole assignment"
+      (let* ([c        (default-config)]
+             [patterns (filter (lambda (p) (eq? (secret-pattern-id p) 'generic-secret))
+                               (all-patterns))]
+             [findings (scan-line "test.txt" 1
+                         "secret = \"xK9mP2nQrT5vWy8zA3bCdEfGhJkLmNpQ\""
+                         patterns c)])
+        (check-predicate findings pair?)
+        (check-equal? "xK9mP2nQrT5vWy8zA3bCdEfGhJkLmNpQ"
+                      (finding-matched-text (car findings)))))
+
+    (test-case "not-placeholder: does not reject keys containing test/fake substrings"
+      (let* ([c        (default-config)]
+             [patterns (filter (lambda (p) (eq? (secret-pattern-id p) 'generic-secret))
+                               (all-patterns))]
+             [findings (scan-line "test.txt" 1
+                         "secret = \"testX9mP2nQrT5vWy8zA3bCdEfGhJk\""
+                         patterns c)])
+        (check-predicate findings pair?)))
+
+    (test-case "basic-auth-url: rejects placeholder credentials"
+      (let* ([c        (default-config)]
+             [patterns (filter (lambda (p) (eq? (secret-pattern-id p) 'basic-auth-url))
+                               (all-patterns))]
+             [real     (scan-line "test.txt" 1
+                         "DATABASE_URL=postgres://admin:s3cr3tP4ss@db.example.com:5432/mydb"
+                         patterns c)]
+             [fake     (scan-line "test.txt" 1
+                         "DATABASE_URL=postgres://user:password@localhost:5432/mydb"
+                         patterns c)])
+        (check-predicate real pair?)
+        (check-equal? '() fake)))
+
     (test-case "scan-content: detects secrets in fixture file"
       (let* ([c       (default-config)]
              [content (read-file-string "test/fixtures/fake-secrets.txt")]
              [findings (scan-content "fake-secrets.txt" content c)])
         (check-predicate findings pair?)
-        (check-predicate (length findings) (lambda (n) (>= n 5)))))
+        (check-predicate (length findings) (lambda (n) (>= n 10)))))
 
     (test-case "scan-content: jcode.json fixture is caught"
       (let* ([c       (default-config)]

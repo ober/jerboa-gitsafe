@@ -99,11 +99,18 @@
 
   ;; --- Extract matched substring from pregexp-match-positions result ---
   (def (extract-match line positions)
-    ;; positions is ((start . end) ...) — first pair is the full match
+    ;; positions is ((start . end) ...) — first pair is the full match,
+    ;; rest are capture groups.  Use the last non-#f capture group if any,
+    ;; so validators receive the meaningful value (e.g. the key itself)
+    ;; rather than the full match including boundary/context chars.
     (and (pair? positions)
-         (let* ([pair (car positions)]
-                [s (car pair)]
-                [e (cdr pair)])
+         (let* ([best (let loop ([rest (cdr positions)] [last-good #f])
+                        (cond
+                          [(null? rest) (or last-good (car positions))]
+                          [(car rest)   (loop (cdr rest) (car rest))]
+                          [else         (loop (cdr rest) last-good)]))]
+                [s (car best)]
+                [e (cdr best)])
            (substring line s e))))
 
   ;; --- Get active patterns given config ---

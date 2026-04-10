@@ -40,12 +40,17 @@
   ;; --- Internal helpers ---
 
   ;; Run a git command and return trimmed stdout.
-  ;; Returns "" on error (non-zero exit).
+  ;; Returns "" on error (non-zero exit), but warns on stderr.
   (def (git-output args)
     (try
       (let ([out (run-process args)])
         (string-trim out))
-      (catch (e) "")))
+      (catch (e)
+        (let ([p (current-error-port)])
+          (display "gitsafe: warning: git command failed: " p)
+          (display (string-join args " ") p)
+          (newline p))
+        "")))
 
   ;; Run git command and return exit code.
   (def (git-exit args)
