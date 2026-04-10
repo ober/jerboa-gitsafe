@@ -24,7 +24,7 @@ COPY . /build/mine/jerboa-gitsafe
 
 # ── Build gitsafe-musl ───────────────────────────────────────────────────────
 WORKDIR /build/mine/jerboa-gitsafe
-RUN make gitsafe-musl-local
+RUN make linux-local
 
 # ── Verify ───────────────────────────────────────────────────────────────────
 RUN ./gitsafe-musl --version

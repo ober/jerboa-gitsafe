@@ -205,7 +205,7 @@
 ;; --- Step 5: Compile and link with musl-gcc ---
 (printf "[5/6] Compiling and linking with musl-gcc (static)...\n")
 
-(define link-libs "-lkernel -llz4 -lz -lm -ldl -lpthread -luuid -lncurses")
+(define link-libs "-lkernel -llz4 -lz -lm -ldl -lpthread")
 
 (let ([rc (system (format "musl-gcc -c -O2 -I~a -o gitsafe-main-musl.o gitsafe-main-musl.c"
                           musl-chez-dir))])
