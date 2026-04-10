@@ -5,7 +5,7 @@ TEMPLATE_DIR := $(HOME)/.git-templates
 HOOK_DIR := $(TEMPLATE_DIR)/hooks
 
 .PHONY: run test binary install clean \
-        gitsafe-musl gitsafe-musl-local docker verify-harden help
+        gitsafe-musl gitsafe-musl-local docker verify-harden help install-native
 
 run:
 	JERBOA_HOME=$(JERBOA_HOME) \
@@ -19,10 +19,10 @@ test:
 	JERBOA_HOME=$(JERBOA_HOME) \
 		$(SCHEME) -q --libdirs $(CURDIR):$(JERBOA_HOME)/lib --script test/test-gitsafe.ss
 
-install: binary
+install: gitsafe-musl
 	mkdir -p $(BIN_DIR)
-	cp gitsafe-bin $(BIN_DIR)/gitsafe
-	@echo "Installed gitsafe to $(BIN_DIR)/gitsafe"
+	cp gitsafe-musl $(BIN_DIR)/gitsafe
+	@echo "Installed gitsafe to $(BIN_DIR)/gitsafe (static binary)"
 	mkdir -p $(HOOK_DIR)
 	printf '#!/bin/sh\nexec gitsafe pre-commit\n' > $(HOOK_DIR)/pre-commit
 	chmod +x $(HOOK_DIR)/pre-commit
@@ -37,6 +37,11 @@ install: binary
 	@echo ""
 	@echo "All new repos (git init / git clone) will use gitsafe automatically."
 	@echo "To add to an existing repo: cd repo && git init"
+
+install-native: binary
+	mkdir -p $(BIN_DIR)
+	cp gitsafe-bin $(BIN_DIR)/gitsafe
+	@echo "Installed gitsafe-bin to $(BIN_DIR)/gitsafe (native, requires Chez runtime)"
 
 # ── Static musl binary ──────────────────────────────────────────────────────
 # Use `make gitsafe-musl` to build in Docker (canonical, reproducible).
@@ -60,19 +65,6 @@ docker:
 	@echo ""
 	@ls -lh gitsafe-musl
 	@file gitsafe-musl
-
-install-musl: gitsafe-musl
-	mkdir -p $(BIN_DIR)
-	cp gitsafe-musl $(BIN_DIR)/gitsafe
-	@echo "Installed gitsafe-musl to $(BIN_DIR)/gitsafe"
-	mkdir -p $(HOOK_DIR)
-	printf '#!/bin/sh\nexec gitsafe pre-commit\n' > $(HOOK_DIR)/pre-commit
-	chmod +x $(HOOK_DIR)/pre-commit
-	printf '#!/bin/sh\nwhile read local_ref local_sha remote_ref remote_sha; do\n  gitsafe pre-push --local-ref "$$local_ref" --remote-ref "$$remote_ref" || exit $$?\ndone\n' > $(HOOK_DIR)/pre-push
-	chmod +x $(HOOK_DIR)/pre-push
-	git config --global init.templateDir $(TEMPLATE_DIR)
-	@echo ""
-	@echo "Global git hooks installed. Static binary — no runtime dependencies."
 
 verify-harden: gitsafe-musl
 	@echo "=== Hardening verification ==="
@@ -103,14 +95,14 @@ help:
 	@echo "  make run ARGS='...'           Run gitsafe in interpreter mode"
 	@echo "  make test                     Run test suite"
 	@echo ""
-	@echo "Native binary (requires local Chez + Jerboa):"
-	@echo "  make binary                   Build gitsafe-bin (dynamic, native)"
-	@echo "  make install                  Build + install to ~/.local/bin"
-	@echo ""
-	@echo "Static binary (zero runtime dependencies):"
+	@echo "Build & install (static binary via Docker, zero runtime deps):"
 	@echo "  make gitsafe-musl             Docker build (canonical, reproducible)"
 	@echo "  make gitsafe-musl-local       Local build (requires musl-gcc + musl Chez)"
-	@echo "  make install-musl             Docker build + install to ~/.local/bin"
+	@echo "  make install                  Docker build + install to ~/.local/bin"
 	@echo "  make verify-harden            Verify binary hardening (stripped, no leaks)"
+	@echo ""
+	@echo "Native binary (requires local Chez + Jerboa):"
+	@echo "  make binary                   Build gitsafe-bin (dynamic, native)"
+	@echo "  make install-native           Build native + install to ~/.local/bin"
 	@echo ""
 	@echo "  make clean                    Remove all build artifacts"
