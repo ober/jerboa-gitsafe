@@ -5,7 +5,7 @@ TEMPLATE_DIR := $(HOME)/.git-templates
 HOOK_DIR := $(TEMPLATE_DIR)/hooks
 
 .PHONY: run test binary install clean linux linux-local docker \
-        verify-harden help install-native
+        verify-harden help install-native macos gitsafe-macos
 
 run:
 	JERBOA_HOME=$(JERBOA_HOME) \
@@ -19,10 +19,15 @@ test:
 	JERBOA_HOME=$(JERBOA_HOME) \
 		$(SCHEME) -q --libdirs $(CURDIR):$(JERBOA_HOME)/lib --script test/test-gitsafe.ss
 
-install: linux
+install: $(if $(filter Darwin,$(shell uname -s)),gitsafe-macos,linux)
 	mkdir -p $(BIN_DIR)
+ifeq ($(shell uname -s),Darwin)
+	cp gitsafe-macos $(BIN_DIR)/gitsafe
+	@echo "Installed gitsafe to $(BIN_DIR)/gitsafe (macOS binary)"
+else
 	cp gitsafe-musl $(BIN_DIR)/gitsafe
 	@echo "Installed gitsafe to $(BIN_DIR)/gitsafe (static binary)"
+endif
 	mkdir -p $(HOOK_DIR)
 	printf '#!/bin/sh\nexec gitsafe pre-commit\n' > $(HOOK_DIR)/pre-commit
 	chmod +x $(HOOK_DIR)/pre-commit
@@ -42,6 +47,17 @@ install-native: binary
 	mkdir -p $(BIN_DIR)
 	cp gitsafe-bin $(BIN_DIR)/gitsafe
 	@echo "Installed gitsafe-bin to $(BIN_DIR)/gitsafe (native, requires Chez runtime)"
+
+# ── macOS binary (maximally static) ─────────────────────────────────────────
+# Statically links Chez kernel, lz4, zlib, ncurses.
+# Only libSystem (always present on macOS) and libiconv are dynamic.
+# Use `make macos` or `make gitsafe-macos` to build on macOS.
+
+macos: gitsafe-macos
+
+gitsafe-macos:
+	JERBOA_HOME=$(JERBOA_HOME) \
+		./build-gitsafe-macos.sh
 
 # ── Static musl binary ──────────────────────────────────────────────────────
 # Use `make linux` to build in Docker (canonical, reproducible).
@@ -85,7 +101,7 @@ verify-harden: linux
 clean:
 	find . -name '*.so' -delete
 	find . -name '*.wpo' -delete
-	rm -f gitsafe-bin gitsafe-musl gitsafe-musl.sha256
+	rm -f gitsafe-bin gitsafe-musl gitsafe-musl.sha256 gitsafe-macos gitsafe-macos.sha256
 
 # ── Help ─────────────────────────────────────────────────────────────────────
 help:
@@ -95,10 +111,11 @@ help:
 	@echo "  make run ARGS='...'           Run gitsafe in interpreter mode"
 	@echo "  make test                     Run test suite"
 	@echo ""
-	@echo "Build & install (static binary via Docker, zero runtime deps):"
-	@echo "  make linux                    Docker build (canonical, reproducible)"
-	@echo "  make linux-local              Local build (requires musl-gcc + musl Chez)"
-	@echo "  make install                  Docker build + install to ~/.local/bin"
+	@echo "Build & install:"
+	@echo "  make macos                    macOS build (statically linked, no runtime deps)"
+	@echo "  make linux                    Linux static build via Docker (canonical)"
+	@echo "  make linux-local              Linux static build locally (requires musl-gcc)"
+	@echo "  make install                  Build + install to ~/.local/bin (auto-detects OS)"
 	@echo "  make verify-harden            Verify binary hardening (stripped, no leaks)"
 	@echo ""
 	@echo "Native binary (requires local Chez + Jerboa):"
