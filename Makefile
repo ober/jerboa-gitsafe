@@ -4,8 +4,8 @@ BIN_DIR := $(HOME)/.local/bin
 TEMPLATE_DIR := $(HOME)/.git-templates
 HOOK_DIR := $(TEMPLATE_DIR)/hooks
 
-.PHONY: run test binary install clean \
-        gitsafe-musl gitsafe-musl-local docker verify-harden help install-native
+.PHONY: run test binary install clean linux linux-local docker \
+        verify-harden help install-native
 
 run:
 	JERBOA_HOME=$(JERBOA_HOME) \
@@ -19,7 +19,7 @@ test:
 	JERBOA_HOME=$(JERBOA_HOME) \
 		$(SCHEME) -q --libdirs $(CURDIR):$(JERBOA_HOME)/lib --script test/test-gitsafe.ss
 
-install: gitsafe-musl
+install: linux
 	mkdir -p $(BIN_DIR)
 	cp gitsafe-musl $(BIN_DIR)/gitsafe
 	@echo "Installed gitsafe to $(BIN_DIR)/gitsafe (static binary)"
@@ -44,13 +44,13 @@ install-native: binary
 	@echo "Installed gitsafe-bin to $(BIN_DIR)/gitsafe (native, requires Chez runtime)"
 
 # ── Static musl binary ──────────────────────────────────────────────────────
-# Use `make gitsafe-musl` to build in Docker (canonical, reproducible).
-# Use `make gitsafe-musl-local` to build directly on the host (requires
+# Use `make linux` to build in Docker (canonical, reproducible).
+# Use `make linux-local` to build directly on the host (requires
 # musl-gcc and a musl-built Chez at ~/chez-musl or JERBOA_MUSL_CHEZ_PREFIX).
 
-gitsafe-musl: docker
+linux: docker
 
-gitsafe-musl-local:
+linux-local:
 	JERBOA_HOME=$(JERBOA_HOME) \
 		./build-gitsafe-musl.sh
 
@@ -66,7 +66,7 @@ docker:
 	@ls -lh gitsafe-musl
 	@file gitsafe-musl
 
-verify-harden: gitsafe-musl
+verify-harden: linux
 	@echo "=== Hardening verification ==="
 	@(file gitsafe-musl | grep -qE 'stripped|no section header') && echo "  PASS: binary is stripped" || echo "  FAIL: binary not stripped"
 	@if strings gitsafe-musl | grep -q "$(HOME)"; then \
@@ -96,8 +96,8 @@ help:
 	@echo "  make test                     Run test suite"
 	@echo ""
 	@echo "Build & install (static binary via Docker, zero runtime deps):"
-	@echo "  make gitsafe-musl             Docker build (canonical, reproducible)"
-	@echo "  make gitsafe-musl-local       Local build (requires musl-gcc + musl Chez)"
+	@echo "  make linux                    Docker build (canonical, reproducible)"
+	@echo "  make linux-local              Local build (requires musl-gcc + musl Chez)"
 	@echo "  make install                  Docker build + install to ~/.local/bin"
 	@echo "  make verify-harden            Verify binary hardening (stripped, no leaks)"
 	@echo ""

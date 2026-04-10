@@ -22,7 +22,7 @@ Requires only Docker. No Chez Scheme, no Jerboa, no compiler toolchain.
 make install
 ```
 
-This runs `make gitsafe-musl` (Docker build) and then:
+This runs `make linux` (Docker build) and then:
 - Copies the static binary to `~/.local/bin/gitsafe`
 - Creates pre-commit and pre-push hooks in `~/.git-templates/hooks/`
 - Sets `git config --global init.templateDir ~/.git-templates`
@@ -37,8 +37,8 @@ export PATH="$HOME/.local/bin:$PATH"
 ### Build only (no install)
 
 ```bash
-make gitsafe-musl          # Docker build → ./gitsafe-musl
-make gitsafe-musl-local    # Local build (requires musl-gcc + musl Chez)
+make linux                 # Docker build → ./gitsafe-musl
+make linux-local           # Local build (requires musl-gcc + musl Chez)
 ```
 
 ## Setting Up Existing Repos
@@ -210,9 +210,9 @@ Options:
 ## Make Targets
 
 ```
+make linux                  Docker build (canonical, reproducible)
+make linux-local            Local build (requires musl-gcc + musl Chez)
 make install                Docker build + install to ~/.local/bin + global hooks
-make gitsafe-musl           Docker build only (→ ./gitsafe-musl)
-make gitsafe-musl-local     Local build (requires musl-gcc + musl Chez)
 make verify-harden          Verify binary hardening (stripped, no path leaks)
 make binary                 Native build (requires local Chez + Jerboa)
 make run ARGS='...'         Run in interpreter mode (development)
