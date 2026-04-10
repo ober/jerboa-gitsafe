@@ -70,8 +70,14 @@
   (exit 1))
 
 (define home       (getenv "HOME"))
-(define jerboa-dir (or (getenv "JERBOA_HOME")
-                       (format "~a/mine/jerboa" home)))
+(define jerboa-dir
+  (or (getenv "JERBOA_HOME")
+      (let ([sibling (format "~a/../jerboa"
+                       (current-directory))])
+        (and (file-exists? sibling) sibling))
+      (begin
+        (display "Error: Cannot find Jerboa. Set JERBOA_HOME.\n")
+        (exit 1))))
 
 (printf "Chez dir:   ~a\n" chez-dir)
 (printf "Jerboa dir: ~a\n" jerboa-dir)

@@ -1,4 +1,4 @@
-JERBOA_HOME ?= $(HOME)/mine/jerboa
+JERBOA_HOME ?= $(realpath $(CURDIR)/../jerboa)
 SCHEME ?= scheme
 BIN_DIR := $(HOME)/.local/bin
 TEMPLATE_DIR := $(HOME)/.git-templates
