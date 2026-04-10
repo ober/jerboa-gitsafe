@@ -36,6 +36,11 @@
     (or (string=? mt "ta6fb") (string=? mt "a6fb")
         (string=? mt "tarm64fb") (string=? mt "arm64fb"))))
 
+(define macos?
+  (let ([mt (symbol->string (machine-type))])
+    (or (string=? mt "ta6osx") (string=? mt "a6osx")
+        (string=? mt "tarm64osx") (string=? mt "arm64osx"))))
+
 (define termux?
   (let ([p (getenv "PREFIX")])
     (and p (> (string-length p) 0)
@@ -61,6 +66,7 @@
             [home (getenv "HOME")])
         (or (find-csv-dir (format "~a/.local/lib" home) mt)
             (find-csv-dir "/usr/local/lib" mt)
+            (find-csv-dir "/opt/homebrew/lib" mt)
             (find-csv-dir "/usr/lib" mt)
             (let ([p (getenv "PREFIX")])
               (and p (find-csv-dir (format "~a/lib" p) mt)))))))
@@ -190,6 +196,7 @@
 (define link-libs
   (cond
     [freebsd? "-lkernel -llz4 -lz -lm -lpthread -lncurses"]
+    [macos?   "-lkernel -llz4 -lz -lm -lpthread -lncurses -liconv"]
     [termux?  "-lkernel -llz4 -lz -lm -ldl -lpthread -lncurses -liconv"]
     [else     "-lkernel -llz4 -lz -lm -ldl -lpthread -luuid -lncurses"]))
 
