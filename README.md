@@ -140,25 +140,111 @@ Place a `.gitsafe.json` in any repo root to customize behavior for that project:
 Without a `.gitsafe.json`, these paths are excluded automatically:
 `*.lock`, `go.sum`, `*.md`, `vendor/**`, `node_modules/**`, `*.min.js`, `*.min.css`
 
+## How It Works
+
+gitsafe uses a multi-layered detection pipeline to catch leaked secrets with high accuracy and low false positives. Each line of scanned content passes through several stages before a finding is reported.
+
+### Detection Pipeline
+
+```
+  line of code
+       |
+  [1. Pattern Match]     -- regex against 28 known secret formats
+       |
+  [2. Capture Extract]   -- pull the secret value from capture groups
+       |
+  [3. Validator]         -- pattern-specific checks (length, prefix, entropy)
+       |
+  [4. Placeholder Filter] -- reject example/dummy values
+       |
+  [5. Allowlist Check]   -- skip known-safe strings from config
+       |
+  [6. Inline Suppression] -- honor gitsafe:ignore comments
+       |
+    FINDING
+```
+
+### 1. Pattern Matching
+
+gitsafe ships with 28 built-in regex patterns organized by severity. Each pattern targets a specific secret format (e.g. `AKIA` prefix for AWS keys, `ghp_` for GitHub PATs, `eyJ` for JWTs). Patterns are compiled once at startup and matched against every line of scanned content.
+
+When a pattern has capture groups, gitsafe extracts the last non-empty capture group as the matched value. This ensures validators receive just the secret (e.g. `AKIAIOSFODNN7EXAMPLE`) rather than the full match with surrounding context characters.
+
+### 2. Validators
+
+Many patterns include a validator function that runs additional checks on the extracted match:
+
+- **Length checks** -- AWS access keys must be exactly 20 characters, Google API keys exactly 39
+- **Prefix checks** -- Anthropic keys must start with `sk-ant-`, GitHub PATs with `gh`
+- **Marker checks** -- OpenAI keys must contain the `T3BlbkFJ` marker
+- **Entropy checks** -- Generic patterns (API key assignments, bearer tokens) require the matched value to exceed a Shannon entropy threshold, rejecting low-randomness values that are unlikely to be real secrets
+- **Placeholder rejection** -- URL credential patterns reject common test values like `user:password@localhost`
+
+### 3. Shannon Entropy Analysis
+
+For patterns that match broad formats (generic key assignments, high-entropy hex/base64), gitsafe computes the [Shannon entropy](https://en.wikipedia.org/wiki/Entropy_(information_theory)) of the matched string -- a measure of randomness in bits per character. Real secrets tend to have high entropy; configuration values and identifiers tend to have low entropy.
+
+Thresholds vary by character set:
+
+| Character Set | Threshold | Example |
+|---|---|---|
+| Hex (`0-9a-f`) | 3.0 bits | `deadbeef1234...` |
+| Base64 (`A-Za-z0-9+/=`) | 4.0 bits | `SGVsbG8gV29y...` |
+| Generic (validator-level) | 3.0--3.5 bits | Used by bearer tokens, API key assignments |
+
+A string like `"aaaaaaaaaaaaaaaa"` has 0.0 bits of entropy and is ignored. A string like `"xK9mP2nQrT5vWy8zA3bCdEfGhJk"` has >4.0 bits and triggers a finding.
+
+### 4. Placeholder Filtering
+
+The `not-placeholder?` filter rejects common test and example values that structurally match secret formats but aren't real credentials. It catches:
+
+- Repeated single characters (`XXXXXXXX`, `aaaaaaaa`)
+- Strings shorter than 8 characters
+- Placeholder words at word boundaries: `example`, `placeholder`, `dummy`, `sample`, `your-api-key`, `replace-me`, `change-me`, `insert-here`
+
+Word-boundary matching prevents false negatives -- a real secret like `testX9mP2nQrT5vWy8zA3b` won't be rejected just because it contains the substring "test".
+
+### 5. Scan Modes
+
+gitsafe scans different content depending on how it's invoked:
+
+- **Pre-commit** (`gitsafe pre-commit`): Reads the git index via `git diff --cached`. For modified files, only added lines in diff hunks are scanned. For entirely new files, the full staged content is scanned. This means gitsafe only flags secrets you're about to commit, not existing content.
+- **Pre-push** (`gitsafe pre-push`): Computes `git rev-list` for the commit range being pushed and scans the unified diff across all changed files in that range.
+- **Manual scan** (`gitsafe scan PATH...`): Reads and scans entire file contents.
+
+In all modes, binary files (images, archives, compiled objects, `.lock` files) are skipped based on file extension. Paths matching exclude globs from `.gitsafe.json` are also skipped.
+
+### 6. False Positive Reduction
+
+Several layers work together to minimize noise:
+
+- **Severity filtering**: Only patterns at or above the configured severity level are active (default: `medium`). Set to `critical` to only catch the most dangerous leaks.
+- **Env-var detection**: Lines like `os.getenv('API_KEY')` or `os.environ.get('TOKEN')` match generic patterns but the extracted values (`API_KEY'`) fail entropy checks.
+- **Long line skip**: Lines over 2000 characters (minified JS, generated code) are skipped entirely.
+- **Allowlist strings**: Known-safe values (e.g. `EXAMPLE_KEY`) in `.gitsafe.json` are ignored when found in any match.
+- **`.gitsafeignore`**: A gitignore-style file for excluding paths from scanning.
+- **Inline suppression**: `# gitsafe:ignore` or `// gitsafe:ignore=pattern-id` on a line suppresses that finding.
+
 ## What It Detects
 
 ### Critical
-- AWS Access Key IDs and Secret Keys
-- GitHub Personal Access Tokens (classic and fine-grained)
-- OpenAI API Keys (standard and project-scoped)
-- Anthropic API Keys
-- Stripe Secret Keys
-- PEM-encoded Private Keys
+- AWS Access Key IDs (`AKIA...`) and Secret Access Keys
+- GitHub Personal Access Tokens (classic `ghp_` and fine-grained `github_pat_`)
+- OpenAI API Keys (standard, project-scoped `sk-proj-`, and service account `sk-svcacct-`)
+- Anthropic API Keys (`sk-ant-`)
+- Stripe Secret and Restricted Keys (`sk_live_`, `rk_live_`)
+- PEM-encoded Private Keys (RSA, DSA, EC, OpenSSH, PGP, encrypted)
+- PuTTY Private Keys (PPK format)
 
 ### High
 - Generic API key/secret/token/password assignments (with entropy validation)
 - Bearer tokens
-- Slack tokens and webhook URLs
-- Google API keys
+- Slack tokens (`xoxb-`, `xoxp-`, etc.) and webhook URLs
+- Google API keys (`AIza...`)
 - Twilio, SendGrid, Mailgun API keys
 - NPM and PyPI tokens
-- JWTs
-- Credentials embedded in URLs
+- JWTs (`eyJ...` three-part base64url)
+- Credentials embedded in URLs (with placeholder rejection)
 
 ### Medium
 - Database connection strings with credentials
