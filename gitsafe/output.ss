@@ -116,7 +116,7 @@
                        (hash-put! s "low"      (hash-ref counts "low"      0))
                        s)]
            [root     (let ([r (make-hash-table)])
-                       (hash-put! r "findings" (list->vector objs))
+                       (hash-put! r "findings" objs)
                        (hash-put! r "summary"  summary)
                        r)])
       (display (json-object->string root))

@@ -69,6 +69,8 @@
     (begin (displayln "gitsafe: error: not inside a git repository") (exit 2))
     (let* ([root      (git-root)]
            [hooks-dir (string-append root "/.git/hooks")])
+      (when (not (file-exists? hooks-dir))
+        (mkdir hooks-dir))
       (displayln "Installing git hooks into " hooks-dir "...")
       (install-hook!
         (string-append hooks-dir "/pre-commit")
