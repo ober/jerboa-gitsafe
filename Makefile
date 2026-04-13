@@ -7,6 +7,8 @@ HOOK_DIR := $(TEMPLATE_DIR)/hooks
 .PHONY: run test binary install clean linux linux-local docker \
         verify-harden help install-native macos gitsafe-macos
 
+.DEFAULT_GOAL := help
+
 run:
 	JERBOA_HOME=$(JERBOA_HOME) \
 		$(SCHEME) -q --libdirs $(CURDIR):$(JERBOA_HOME)/lib --script gitsafe/main.ss -- $(ARGS)

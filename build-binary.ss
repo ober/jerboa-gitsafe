@@ -114,16 +114,31 @@
 
 ;; --- Step 2: Whole-program optimization ---
 (printf "[2/5] Running whole-program optimization...\n")
-(let ([missing (compile-whole-program "gitsafe/main-binary.wpo" "gitsafe-all.so")])
-  (unless (null? missing)
-    (printf "  WPO: ~a libraries not incorporated (missing .wpo):\n" (length missing))
-    (for-each (lambda (lib) (printf "    ~a\n" lib)) missing)))
+(define wpo-missing
+  (compile-whole-program "gitsafe/main-binary.wpo" "gitsafe-all.so"))
+(unless (null? wpo-missing)
+  (printf "  WPO: ~a libraries not incorporated (missing .wpo) — will bundle .so files:\n"
+          (length wpo-missing))
+  (for-each (lambda (lib) (printf "    ~a\n" lib)) wpo-missing))
 
 ;; --- Step 3: Create boot file + C headers ---
 (printf "[3/5] Creating boot file and C headers...\n")
 
 (define (existing-so-files paths)
   (filter file-exists? paths))
+
+;; Convert a library name like (std misc string) → jerboa-dir/lib/std/misc/string.so
+(define (lib-name->so-path lib-name)
+  (let* ([parts (map symbol->string lib-name)]
+         [rel   (let loop ([ps parts] [acc ""])
+                  (if (null? ps)
+                    acc
+                    (loop (cdr ps)
+                          (if (string=? acc "")
+                            (car ps)
+                            (string-append acc "/" (car ps))))))]
+         [so    (format "~a/lib/~a.so" jerboa-dir rel)])
+    (and (file-exists? so) so)))
 
 (define gitsafe-modules
   '("gitsafe/entropy"
@@ -134,9 +149,23 @@
     "gitsafe/scanner"
     "gitsafe/output"))
 
+;; Bundle both gitsafe modules and any stdlib .so files the WPO couldn't inline.
+;; This makes gitsafe-bin self-contained without requiring Chez library paths at runtime.
+(define missing-sos
+  (let loop ([libs wpo-missing] [acc '()])
+    (if (null? libs)
+      (reverse acc)
+      (let ([so (lib-name->so-path (car libs))])
+        (loop (cdr libs) (if so (cons so acc) acc))))))
+
+(when (not (null? missing-sos))
+  (printf "  Bundling ~a stdlib .so files into boot image.\n" (length missing-sos)))
+
 (apply make-boot-file "gitsafe.boot" '("scheme" "petite")
   (existing-so-files
-    (map (lambda (m) (format "~a.so" m)) gitsafe-modules)))
+    (append
+      (map (lambda (m) (format "~a.so" m)) gitsafe-modules)
+      missing-sos)))
 
 (file->c-header "gitsafe-all.so"
                 "gitsafe_program.h"
