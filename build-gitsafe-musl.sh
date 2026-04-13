@@ -60,6 +60,7 @@ if [ -f "gitsafe-musl" ]; then
     ldd gitsafe-musl 2>&1 || echo "  (Fully static — no dynamic dependencies)"
     echo ""
     echo "Test: ./gitsafe-musl --version"
+    ./gitsafe-musl --version || { echo "ERROR: binary smoke test failed"; exit 1; }
 else
     echo "ERROR: gitsafe-musl not created"
     exit 1

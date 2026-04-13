@@ -84,6 +84,7 @@ if [ -f "gitsafe-macos" ]; then
     otool -L gitsafe-macos 2>/dev/null | tail -n +2 || true
     echo ""
     echo "Test: ./gitsafe-macos --version"
+    ./gitsafe-macos --version || { echo "ERROR: binary smoke test failed"; exit 1; }
 else
     echo "ERROR: gitsafe-macos not created"
     exit 1
