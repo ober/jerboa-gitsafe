@@ -50,10 +50,38 @@
      redacted      ;; string (middle replaced with ***)
      ))
 
-  ;; --- Parallel file scan: one thread per file, results in original order ---
+  ;; --- Number of CPU cores for parallel scanning ---
+  ;; Respects GITSAFE_THREADS env var; otherwise uses platform-native cpu-count.
+  (def *num-cpus*
+    (or (and (getenv "GITSAFE_THREADS")
+             (string->number (getenv "GITSAFE_THREADS")))
+        (cpu-count)))
+
+  ;; --- Split lst into k roughly equal contiguous chunks ---
+  (def (chunk-list lst k)
+    (let* ([v     (list->vector lst)]
+           [total (vector-length v)]
+           [n     (min k total)])
+      (map (lambda (i)
+             (let ([start (quotient (* i total) n)]
+                   [end   (quotient (* (+ i 1) total) n)])
+               (let loop ([j start] [acc '()])
+                 (if (= j end)
+                   (reverse acc)
+                   (loop (+ j 1) (cons (vector-ref v j) acc))))))
+           (iota n))))
+
+  ;; --- Parallel file scan: bounded to *num-cpus* threads ---
+  ;; Each thread drains a contiguous chunk serially; results preserved in order.
   (def (pmap-files f items)
-    (let ([threads (map (lambda (x) (spawn (lambda () (f x)))) items)])
-      (apply append (map thread-join! threads))))
+    (if (null? items)
+      '()
+      (let* ([chunks  (chunk-list items *num-cpus*)]
+             [threads (map (lambda (chunk)
+                             (spawn (lambda ()
+                                      (apply append (map f chunk)))))
+                           chunks)])
+        (apply append (map thread-join! threads)))))
 
   ;; --- Extensions to skip (binary / non-secret files) ---
   ;; path-extension returns WITH dot (e.g. ".png"), so we include dots here.
