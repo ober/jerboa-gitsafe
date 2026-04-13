@@ -19,6 +19,11 @@
 
 FROM jerboa21/jerboa AS builder
 
+# ── Override stale baked-in Jerboa with host version ────────────────────────
+# The base image ships an older Jerboa; overlay it so the build sees the same
+# prelude exports (meta, atom?, etc.) as the local macOS build.
+COPY --from=jerboa . /build/mine/jerboa/
+
 # ── Copy gitsafe source ─────────────────────────────────────────────────────
 COPY . /build/mine/jerboa-gitsafe
 

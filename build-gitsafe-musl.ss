@@ -168,12 +168,29 @@
     (fprintf out "#include \"gitsafe_boot.h\"\n")
     (fprintf out "#include \"gitsafe_program.h\"\n")
     (fprintf out "\n")
-    ;; dlopen/dlsym stubs for static musl build
-    ;; Chez kernel references these; returning non-NULL from dlopen prevents
-    ;; load-shared-object from erroring, while dlsym returns NULL for any lookup.
-    (fprintf out "/* dlopen/dlsym stubs — no shared libraries in static binary */\n")
-    (fprintf out "void *dlopen(const char *f, int m) { (void)f; (void)m; return (void*)1; }\n")
-    (fprintf out "void *dlsym(void *h, const char *s) { (void)h; (void)s; return NULL; }\n")
+    ;; dlopen/dlsym stubs for fully static musl build.
+    ;;
+    ;; dlopen(NULL, ...) returns a fake self-handle so Chez can query its own
+    ;; symbol table. All other dlopen calls return NULL, causing
+    ;; (load-shared-object "libjerboa_native.so") in (std regex) to throw an
+    ;; exception that the guard catches → native-available? = #f → all regex
+    ;; falls back to the pure-Scheme pregexp engine.
+    ;;
+    ;; dlsym returns a harmless stub for the three known regex foreign-procedure
+    ;; symbols in case Chez resolves them eagerly on this build (empirically
+    ;; it can). The stub returns -1 but is never called because native-available?
+    ;; = #f prevents any code path that would invoke c-native-compile/find/free.
+    (fprintf out "/* dlopen/dlsym stubs — fully static musl binary, no dynamic libraries */\n")
+    (fprintf out "static int _jerboa_native_stub(void) { return -1; }\n")
+    (fprintf out "void *dlopen(const char *f, int m) { (void)m; return (!f) ? (void*)1 : NULL; }\n")
+    (fprintf out "void *dlsym(void *h, const char *s) {\n")
+    (fprintf out "  (void)h;\n")
+    (fprintf out "  if (s && (strcmp(s, \"jerboa_regex_compile\") == 0 ||\n")
+    (fprintf out "            strcmp(s, \"jerboa_regex_find\") == 0 ||\n")
+    (fprintf out "            strcmp(s, \"jerboa_regex_free\") == 0))\n")
+    (fprintf out "    return (void *)_jerboa_native_stub;\n")
+    (fprintf out "  return NULL;\n")
+    (fprintf out "}\n")
     (fprintf out "int dlclose(void *h) { (void)h; return 0; }\n")
     (fprintf out "char *dlerror(void) { return \"static build\"; }\n")
     (fprintf out "\n")
@@ -195,6 +212,16 @@
     (fprintf out "  Sregister_boot_file_bytes(\"scheme\", (void*)scheme_boot_data, scheme_boot_size);\n")
     (fprintf out "  Sregister_boot_file_bytes(\"gitsafe\", (void*)gitsafe_boot_data, gitsafe_boot_size);\n")
     (fprintf out "  Sbuild_heap(NULL, NULL);\n")
+    ;; Sforeign_symbol MUST be called after Sbuild_heap (foreign entry table is
+    ;; not initialized until then). We register the three Rust regex symbols with
+    ;; a harmless C stub so that (std regex)'s (foreign-procedure ...) definitions
+    ;; succeed when the WPO program initializes. The stub returns -1 but is never
+    ;; called: dlopen("libjerboa_native.so") returns NULL (our stub), so
+    ;; native-available? = #f, which prevents any call to c-native-compile/find/free.
+    (fprintf out "  /* Register regex native symbols AFTER Sbuild_heap */\n")
+    (fprintf out "  Sforeign_symbol(\"jerboa_regex_compile\", (void *)_jerboa_native_stub);\n")
+    (fprintf out "  Sforeign_symbol(\"jerboa_regex_find\",    (void *)_jerboa_native_stub);\n")
+    (fprintf out "  Sforeign_symbol(\"jerboa_regex_free\",    (void *)_jerboa_native_stub);\n")
     (fprintf out "  int status = Sscheme_script(prog_path, argc, (const char **)argv);\n")
     (fprintf out "  unlink(prog_path);\n")
     (fprintf out "  Sscheme_deinit();\n")

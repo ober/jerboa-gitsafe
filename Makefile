@@ -74,7 +74,7 @@ linux-local:
 
 docker:
 	@echo "=== Building gitsafe-musl in Docker ==="
-	docker build --platform linux/amd64 --build-arg CACHE_BUST=$$(date +%s) -t gitsafe-builder .
+	docker build --platform linux/amd64 --build-arg CACHE_BUST=$$(date +%s) --build-context jerboa=$(JERBOA_HOME) -t gitsafe-builder .
 	@id=$$(docker create --platform linux/amd64 gitsafe-builder) && \
 	docker cp $$id:/out/gitsafe-musl ./gitsafe-musl && \
 	docker cp $$id:/out/gitsafe-musl.sha256 ./gitsafe-musl.sha256 && \
