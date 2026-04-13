@@ -27,6 +27,7 @@
                   partition
                   make-date make-time)
            (except (jerboa prelude) meta atom?)
+          (only (std misc thread) spawn thread-join!)
           (std regex)
           (std misc string)
           (std misc ports)
@@ -48,6 +49,11 @@
      matched-text  ;; string (original match)
      redacted      ;; string (middle replaced with ***)
      ))
+
+  ;; --- Parallel file scan: one thread per file, results in original order ---
+  (def (pmap-files f items)
+    (let ([threads (map (lambda (x) (spawn (lambda () (f x)))) items)])
+      (apply append (map thread-join! threads))))
 
   ;; --- Extensions to skip (binary / non-secret files) ---
   ;; path-extension returns WITH dot (e.g. ".png"), so we include dots here.
@@ -224,22 +230,22 @@
   (def (scan-staged config)
     (let ([files (staged-files)]
           [ignore-pats (load-ignorefile)])
-      (apply append
-        (map (lambda (path)
-               (cond
-                 [(skip-file? path config) '()]
-                 [(ignored-file? path ignore-pats) '()]
-                 [else
-                  (let ([hunks (staged-diff path)])
-                    (if (null? hunks)
-                      ;; New file — scan full staged content
-                      (let ([content (staged-content path)])
-                        (if (string-empty? content)
-                          '()
-                          (scan-content path content config)))
-                      ;; Modified file — scan only added lines
-                      (scan-diff-hunks hunks config)))]))
-             files))))
+      (pmap-files
+        (lambda (path)
+          (cond
+            [(skip-file? path config) '()]
+            [(ignored-file? path ignore-pats) '()]
+            [else
+             (let ([hunks (staged-diff path)])
+               (if (null? hunks)
+                 ;; New file — scan full staged content
+                 (let ([content (staged-content path)])
+                   (if (string-empty? content)
+                     '()
+                     (scan-content path content config)))
+                 ;; Modified file — scan only added lines
+                 (scan-diff-hunks hunks config)))]))
+        files)))
 
   ;; --- Top-level: scan push range ---
   (def (scan-push-range local-ref remote-ref config)
@@ -249,18 +255,18 @@
         '()
         ;; Scan diff of the entire range
         (let ([files (changed-files-in-range remote-ref local-ref)])
-          (apply append
-            (map (lambda (path)
-                   (cond
-                     [(skip-file? path config) '()]
-                     [(ignored-file? path ignore-pats) '()]
-                     [else
-                      (let ([diff-text (range-diff remote-ref local-ref path)])
-                        (let ([hunks (if (string-empty? diff-text)
-                                       '()
-                                       (parse-unified-diff-text diff-text path))])
-                          (scan-diff-hunks hunks config)))]))
-                 files))))))
+          (pmap-files
+            (lambda (path)
+              (cond
+                [(skip-file? path config) '()]
+                [(ignored-file? path ignore-pats) '()]
+                [else
+                 (let ([diff-text (range-diff remote-ref local-ref path)])
+                   (let ([hunks (if (string-empty? diff-text)
+                                  '()
+                                  (parse-unified-diff-text diff-text path))])
+                     (scan-diff-hunks hunks config)))]))
+            files)))))
 
   ;; Helper: expose parse for push range use
   (def (parse-unified-diff-text text file)
@@ -308,15 +314,15 @@
   ;; --- Top-level: scan specific files ---
   (def (scan-files paths config)
     (let ([ignore-pats (load-ignorefile)])
-      (apply append
-        (map (lambda (path)
-               (cond
-                 [(not (file-exists? path)) '()]
-                 [(skip-file? path config) '()]
-                 [(ignored-file? path ignore-pats) '()]
-                 [else
-                  (let ([content (read-file-string path)])
-                    (scan-content path content config))]))
-             paths))))
+      (pmap-files
+        (lambda (path)
+          (cond
+            [(not (file-exists? path)) '()]
+            [(skip-file? path config) '()]
+            [(ignored-file? path ignore-pats) '()]
+            [else
+             (let ([content (read-file-string path)])
+               (scan-content path content config))]))
+        paths)))
 
 ) ;; end library
