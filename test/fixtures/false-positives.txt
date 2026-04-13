@@ -27,3 +27,12 @@ integrity = "sha512-abc123def456"
 
 # Test that gitsafe:ignore suppression works
 secret_key = "sk_live_thisshouldbesuppressed"  # gitsafe:ignore
+
+# URLs in comments — long URL paths look like base64 but are not secrets.
+# These are real examples from Wireshark dissector source files.
+;; https://github.com/couchbase/couchbase-protocol
+;; https://kafka.apache.org/protocol/protocol
+;; https://github.com/wireshark/wireshark/blob/master/epan/dissectors/packet-memcache.c
+;; https://en.wikipedia.org/wiki/RTTRP#History-2ddb12341234abcdef12abcd2cf5
+;; https://sourceforge.net/projects/moldudp64/files/spec/moldudp64.pdf
+;; https://standards.ieee.org/findstds/standard/802.3304-2017.html

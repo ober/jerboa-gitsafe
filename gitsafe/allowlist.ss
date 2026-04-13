@@ -14,7 +14,7 @@
                   partition
                   make-date make-time)
            (except (jerboa prelude) meta atom?)
-          (std pregexp)
+          (std regex)
           (std misc ports)
           (std misc string)
           (gitsafe config))
@@ -26,16 +26,15 @@
   ;;   // gitsafe:ignore
   ;;   /* gitsafe:ignore */
 
-  (def *suppress-pat*
-    (pregexp "(?:#|//|/\\*)\\s*gitsafe:ignore(?:=([A-Za-z0-9_-]+))?"))
+  (def *suppress-re*
+    (re "(?:#|//|/\\*)\\s*gitsafe:ignore(?:=([A-Za-z0-9_-]+))?"))
 
   ;; Returns #t if the line is suppressed (optionally for a specific pattern-id symbol).
   (def (line-suppressed? line (pattern-id #f))
-    (let ([m (pregexp-match *suppress-pat* line)])
+    (let ([m (re-search *suppress-re* line)])
       (if (not m)
         #f
-        ;; m = (full-match maybe-pattern-id-group)
-        (let ([specific (and (pair? (cdr m)) (cadr m))])
+        (let ([specific (re-match-group m 1)])
           (cond
             ;; No specific pattern in comment — suppress all
             [(not specific) #t]

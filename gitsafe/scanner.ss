@@ -27,7 +27,7 @@
                   partition
                   make-date make-time)
            (except (jerboa prelude) meta atom?)
-          (std pregexp)
+          (std regex)
           (std misc string)
           (std misc ports)
           (std os path)
@@ -81,6 +81,33 @@
                (config-excluded? config path))
            #t)))
 
+  ;; --- Compiled patterns ---
+  (def *hunk-header-re*
+    (re "^@@ -[0-9,]+ \\+([0-9]+)(?:,[0-9]+)? @@"))
+
+  ;; --- URL context detection ---
+  ;; Pattern IDs whose matches should be suppressed when they appear inside a URL.
+  ;; These are the noisy entropy patterns; precise patterns (AWS keys, GitHub PATs,
+  ;; etc.) are intentionally excluded so credentials embedded in URLs are still caught.
+  (def *url-sensitive-patterns*
+    '(high-entropy-base64 high-entropy-hex))
+
+  ;; Returns #t if the position match-start in line follows a "://" sequence,
+  ;; indicating the match is part of a URL path, query string, or fragment.
+  ;; Looks back up to 300 chars to handle long URLs before the match.
+  (def (in-url-context? line match-start)
+    (let ([limit (string-length line)])
+      (let loop ([i (max 0 (- match-start 300))])
+        (cond
+          ;; Need at least 3 chars "://" before match-start
+          [(>= (+ i 2) match-start) #f]
+          [(and (< (+ i 2) limit)
+                (char=? (string-ref line i) #\:)
+                (char=? (string-ref line (+ i 1)) #\/)
+                (char=? (string-ref line (+ i 2)) #\/))
+           #t]
+          [else (loop (+ i 1))]))))
+
   ;; --- Severity ordering ---
   (def (severity-level sev)
     (match sev
@@ -97,21 +124,19 @@
   (def (min-severity config)
     (gitsafe-config-severity config))
 
-  ;; --- Extract matched substring from pregexp-match-positions result ---
-  (def (extract-match line positions)
-    ;; positions is ((start . end) ...) — first pair is the full match,
-    ;; rest are capture groups.  Use the last non-#f capture group if any,
-    ;; so validators receive the meaningful value (e.g. the key itself)
-    ;; rather than the full match including boundary/context chars.
-    (and (pair? positions)
-         (let* ([best (let loop ([rest (cdr positions)] [last-good #f])
-                        (cond
-                          [(null? rest) (or last-good (car positions))]
-                          [(car rest)   (loop (cdr rest) (car rest))]
-                          [else         (loop (cdr rest) last-good)]))]
-                [s (car best)]
-                [e (cdr best)])
-           (substring line s e))))
+  ;; --- Extract matched substring from a re-match-object ---
+  (def (extract-match m)
+    ;; Use the last non-#f capture group if any, so validators receive
+    ;; the meaningful value (e.g. the key itself) rather than the full
+    ;; match including boundary/context chars.
+    (let ([groups (re-match-groups m)])
+      (if (null? groups)
+        (re-match-full m)
+        (let loop ([gs groups] [last-good #f])
+          (cond
+            [(null? gs) (or last-good (re-match-full m))]
+            [(car gs)   (loop (cdr gs) (car gs))]
+            [else       (loop (cdr gs) last-good)])))))
 
   ;; --- Get active patterns given config ---
   (def (active-patterns config)
@@ -132,15 +157,18 @@
         (if (null? pats)
           (reverse results)
           (let ([pat (car pats)])
-            (let ([positions (pregexp-match-positions
-                               (secret-pattern-pregexp pat) line)])
-              (if (not positions)
+            (let ([m (re-search (secret-pattern-pregexp pat) line)])
+              (if (not m)
                 (loop (cdr pats) results)
-                (let ([matched (extract-match line positions)])
+                (let ([matched (extract-match m)])
                   (if (not matched)
                     (loop (cdr pats) results)
-                    ;; Run validator if present
-                    (let ([valid? (let ([v (secret-pattern-validator pat)])
+                    ;; For high-noise entropy patterns, suppress matches inside URLs
+                    (if (and (member (secret-pattern-id pat) *url-sensitive-patterns*)
+                             (in-url-context? line (re-match-start m)))
+                      (loop (cdr pats) results)
+                      ;; Run validator if present
+                      (let ([valid? (let ([v (secret-pattern-validator pat)])
                                     (if v (v matched) #t))])
                       (if (not valid?)
                         (loop (cdr pats) results)
@@ -160,7 +188,7 @@
                                        (redact line)
                                        matched
                                        (redact matched))])
-                              (loop (cdr pats) (cons f results))))))))))
+                              (loop (cdr pats) (cons f results)))))))))))
           ))))))
 
   ;; --- Scan full file content (string) ---
@@ -248,10 +276,10 @@
         (let ([line (car lines)]
               [rest (cdr lines)])
           (cond
-            [(pregexp-match "^@@ -[0-9,]+ \\+([0-9]+)(?:,[0-9]+)? @@" line)
+            [(re-search *hunk-header-re* line)
              =>
              (lambda (m)
-               (let* ([new-start (string->number (cadr m))]
+               (let* ([new-start (string->number (re-match-group m 1))]
                       [hunks* (if (and cur-hunk
                                        (not (null? (diff-hunk-lines cur-hunk))))
                                 (cons cur-hunk hunks)

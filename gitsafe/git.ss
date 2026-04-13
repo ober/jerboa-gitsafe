@@ -24,7 +24,7 @@
                   partition
                   make-date make-time)
            (except (jerboa prelude) meta atom?)
-          (std pregexp)
+          (std regex)
           (std misc process)
           (std misc string)
           (std misc ports))
@@ -66,6 +66,9 @@
   ;; --- Parse unified diff format ---
   ;; Returns list of diff-hunk structs from a git diff output string.
   ;; Only captures added lines (lines starting with +, not +++).
+  (def *hunk-header-re*
+    (re "^@@ -[0-9,]+ \\+([0-9]+)(?:,[0-9]+)? @@"))
+
   (def (parse-unified-diff diff-text current-file)
     (let loop ([lines (string-split diff-text #\newline)]
                [hunks '()]
@@ -81,11 +84,10 @@
               [rest (cdr lines)])
           (cond
             ;; Hunk header: @@ -old,count +new,count @@
-            [(pregexp-match "^@@ -[0-9,]+ \\+([0-9]+)(?:,[0-9]+)? @@" line)
+            [(re-search *hunk-header-re* line)
              =>
              (lambda (m)
-               (let* ([start-str (cadr m)]
-                      [new-start (string->number start-str)]
+               (let* ([new-start (string->number (re-match-group m 1))]
                       ;; Save previous hunk if it had findings
                       [hunks* (if (and cur-hunk
                                        (not (null? (diff-hunk-lines cur-hunk))))

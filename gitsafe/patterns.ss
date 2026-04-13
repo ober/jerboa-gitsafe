@@ -20,7 +20,7 @@
                   partition
                   make-date make-time)
            (except (jerboa prelude) meta atom?)
-          (std pregexp))
+          (std regex))
 
   ;; --- Secret pattern struct ---
   (defstruct secret-pattern
@@ -58,13 +58,16 @@
                     (let ([p (/ (inexact c) n)])
                       (loop (+ i 1) (- e (* p (log p 2))))))))))))))
 
+  (def *placeholder-re*
+    (re "(?i:(?:^|[_.-])(?:example|placeholder|dummy|sample|your[_-]?(?:api[_-]?)?key|replace[_-]?me|change[_-]?me|insert[_-]?here)(?:$|[_.-]))"))
+
   (def (not-placeholder? str)
     ;; Reject common test/example placeholder strings.
     ;; Only match placeholder words at word boundaries (start/end or separator)
     ;; to avoid rejecting real secrets that happen to contain "test" or "fake".
-    (not (or (pregexp-match "^[Xx]+$" str)
-             (pregexp-match "^[Aa]+$" str)
-             (pregexp-match "(?i:(?:^|[_.-])(?:example|placeholder|dummy|sample|your[_-]?(?:api[_-]?)?key|replace[_-]?me|change[_-]?me|insert[_-]?here)(?:$|[_.-]))" str)
+    (not (or (re-match? "[Xx]+" str)
+             (re-match? "[Aa]+" str)
+             (re-search *placeholder-re* str)
              (string=? str "")
              (< (string-length str) 8))))
 
@@ -75,7 +78,7 @@
       'aws-access-key
       "AWS Access Key ID"
       'critical
-      (pregexp "(?:^|[^A-Za-z0-9])((?:AKIA|ABIA|ACCA|ASIA)[A-Z0-9]{16})(?:[^A-Za-z0-9]|$)")
+      (re "(?:^|[^A-Za-z0-9])((?:AKIA|ABIA|ACCA|ASIA)[A-Z0-9]{16})(?:[^A-Za-z0-9]|$)")
       (lambda (m) (= (string-length m) 20))
       "AWS IAM Access Key ID (starts with AKIA/ABIA/ACCA/ASIA)"))
 
@@ -84,7 +87,7 @@
       'aws-secret-key
       "AWS Secret Access Key"
       'critical
-      (pregexp "(?i:aws[_-]?secret[_-]?(?:access[_-]?)?key|secret[_-]?key)\\s*[=:]\\s*['\"]?([A-Za-z0-9/+=]{40})['\"]?")
+      (re "(?i:aws[_-]?secret[_-]?(?:access[_-]?)?key|secret[_-]?key)\\s*[=:]\\s*['\"]?([A-Za-z0-9/+=]{40})['\"]?")
       (lambda (m) (= (string-length m) 40))
       "AWS Secret Access Key (40-char base64)"))
 
@@ -93,7 +96,7 @@
       'github-pat
       "GitHub Personal Access Token"
       'critical
-      (pregexp "gh[pousr]_[A-Za-z0-9_]{36,255}")
+      (re "gh[pousr]_[A-Za-z0-9_]{36,255}")
       (lambda (m) (has-prefix? m "gh"))
       "GitHub PAT (classic: ghp_, gho_, ghu_, ghs_, ghr_)"))
 
@@ -102,7 +105,7 @@
       'github-fine-grained
       "GitHub Fine-Grained PAT"
       'critical
-      (pregexp "github_pat_[A-Za-z0-9_]{22,255}")
+      (re "github_pat_[A-Za-z0-9_]{22,255}")
       #f
       "GitHub Fine-Grained Personal Access Token"))
 
@@ -111,7 +114,7 @@
       'openai-api-key
       "OpenAI API Key"
       'critical
-      (pregexp "sk-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}")
+      (re "sk-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}")
       (lambda (m) (string-contains m "T3BlbkFJ"))
       "OpenAI API Key (contains T3BlbkFJ marker)"))
 
@@ -120,7 +123,7 @@
       'openai-project-key
       "OpenAI Project Key"
       'critical
-      (pregexp "sk-proj-[A-Za-z0-9_-]{40,200}")
+      (re "sk-proj-[A-Za-z0-9_-]{40,200}")
       #f
       "OpenAI Project-scoped API Key"))
 
@@ -129,7 +132,7 @@
       'anthropic-api-key
       "Anthropic API Key"
       'critical
-      (pregexp "sk-ant-(?:[a-z0-9]+-)?[A-Za-z0-9_-]{80,200}")
+      (re "sk-ant-(?:[a-z0-9]+-)?[A-Za-z0-9_-]{80,200}")
       (lambda (m) (has-prefix? m "sk-ant-"))
       "Anthropic Claude API Key"))
 
@@ -138,7 +141,7 @@
       'openai-svcacct-key
       "OpenAI Service Account Key"
       'critical
-      (pregexp "sk-svcacct-[A-Za-z0-9_-]{40,200}")
+      (re "sk-svcacct-[A-Za-z0-9_-]{40,200}")
       #f
       "OpenAI Service Account API Key"))
 
@@ -147,7 +150,7 @@
       'stripe-secret
       "Stripe Secret Key"
       'critical
-      (pregexp "[sr]k_live_[A-Za-z0-9]{24,99}")
+      (re "[sr]k_live_[A-Za-z0-9]{24,99}")
       #f
       "Stripe live secret or restricted key"))
 
@@ -156,7 +159,7 @@
       'private-key-pem
       "Private Key (PEM)"
       'critical
-      (pregexp "-----BEGIN (?:RSA |DSA |EC |OPENSSH |PGP |ENCRYPTED )?PRIVATE KEY-----")
+      (re "-----BEGIN (?:RSA |DSA |EC |OPENSSH |PGP |ENCRYPTED )?PRIVATE KEY-----")
       #f
       "PEM-encoded private key block"))
 
@@ -165,7 +168,7 @@
       'putty-private-key
       "PuTTY Private Key"
       'critical
-      (pregexp "PuTTY-User-Key-File-[0-9]+:")
+      (re "PuTTY-User-Key-File-[0-9]+:")
       #f
       "PuTTY PPK private key file"))
 
@@ -176,7 +179,7 @@
       'generic-api-key
       "Generic API Key Assignment"
       'high
-      (pregexp "(?i:(api[_-]?key|apikey|api[_-]?secret|access[_-]?key))\\s*[=:]\\s*['\"]([A-Za-z0-9_/+=.\\-]{16,})['\"]")
+      (re "(?i:(api[_-]?key|apikey|api[_-]?secret|access[_-]?key))\\s*[=:]\\s*['\"]([A-Za-z0-9_/+=.\\-]{16,})['\"]")
       (lambda (m) (and (not-placeholder? m) (entropy-above? m 3.5)))
       "Key/value assignment with high-entropy value"))
 
@@ -185,7 +188,7 @@
       'generic-secret
       "Generic Secret Assignment"
       'high
-      (pregexp "(?i:(secret|token|password|passwd|credential|auth[_-]?key))\\s*[=:]\\s*['\"]([^'\"\\s]{8,})['\"]")
+      (re "(?i:(secret|token|password|passwd|credential|auth[_-]?key))\\s*[=:]\\s*['\"]([^'\"\\s]{8,})['\"]")
       (lambda (m) (and (not-placeholder? m) (entropy-above? m 3.5)))
       "Assignment of secret/token/password with high-entropy value"))
 
@@ -194,7 +197,7 @@
       'generic-bearer
       "Bearer Token"
       'high
-      (pregexp "(?i:bearer)\\s+([A-Za-z0-9_.~+/=\\-]{20,})")
+      (re "(?i:bearer)\\s+([A-Za-z0-9_.~+/=\\-]{20,})")
       (lambda (m) (entropy-above? m 3.0))
       "HTTP Authorization Bearer token"))
 
@@ -203,7 +206,7 @@
       'slack-token
       "Slack Token"
       'high
-      (pregexp "xox[bpors]-[A-Za-z0-9\\-]{10,250}")
+      (re "xox[bpors]-[A-Za-z0-9\\-]{10,250}")
       #f
       "Slack API token (xoxb-, xoxp-, xoxo-, xoxr-, xoxs-)"))
 
@@ -212,7 +215,7 @@
       'slack-webhook
       "Slack Webhook URL"
       'high
-      (pregexp "hooks\\.slack\\.com/services/T[A-Z0-9]{8,10}/B[A-Z0-9]{8,10}/[A-Za-z0-9]{20,30}")
+      (re "hooks\\.slack\\.com/services/T[A-Z0-9]{8,10}/B[A-Z0-9]{8,10}/[A-Za-z0-9]{20,30}")
       #f
       "Slack incoming webhook URL"))
 
@@ -221,7 +224,7 @@
       'google-api-key
       "Google API Key"
       'high
-      (pregexp "AIza[A-Za-z0-9_\\-]{35}")
+      (re "AIza[A-Za-z0-9_\\-]{35}")
       (lambda (m) (= (string-length m) 39))
       "Google Cloud / Maps API key (starts with AIza)"))
 
@@ -230,7 +233,7 @@
       'twilio-api-key
       "Twilio API Key"
       'high
-      (pregexp "SK[a-f0-9]{32}")
+      (re "SK[a-f0-9]{32}")
       (lambda (m) (= (string-length m) 34))
       "Twilio API key SID"))
 
@@ -239,7 +242,7 @@
       'sendgrid-api-key
       "SendGrid API Key"
       'high
-      (pregexp "SG\\.[A-Za-z0-9_\\-]{22}\\.[A-Za-z0-9_\\-]{43}")
+      (re "SG\\.[A-Za-z0-9_\\-]{22}\\.[A-Za-z0-9_\\-]{43}")
       #f
       "SendGrid API key (SG. format)"))
 
@@ -248,7 +251,7 @@
       'mailgun-api-key
       "Mailgun API Key"
       'high
-      (pregexp "key-[a-f0-9]{32}")
+      (re "key-[a-f0-9]{32}")
       (lambda (m) (= (string-length m) 36))
       "Mailgun private API key"))
 
@@ -257,7 +260,7 @@
       'npm-token
       "NPM Token"
       'high
-      (pregexp "npm_[A-Za-z0-9]{36}")
+      (re "npm_[A-Za-z0-9]{36}")
       #f
       "NPM publish/automation token"))
 
@@ -266,7 +269,7 @@
       'pypi-token
       "PyPI Token"
       'high
-      (pregexp "pypi-[A-Za-z0-9_\\-]{50,}")
+      (re "pypi-[A-Za-z0-9_\\-]{50,}")
       #f
       "PyPI upload token"))
 
@@ -275,19 +278,20 @@
       'jwt
       "JSON Web Token"
       'high
-      (pregexp "eyJ[A-Za-z0-9_\\-]{10,}\\.[A-Za-z0-9_\\-]{10,}\\.[A-Za-z0-9_\\-]{10,}")
+      (re "eyJ[A-Za-z0-9_\\-]{10,}\\.[A-Za-z0-9_\\-]{10,}\\.[A-Za-z0-9_\\-]{10,}")
       #f
       "JWT (three-part base64url token starting with eyJ)"))
+
+  (def *basic-auth-placeholder-re*
+    (re "(?i://(?:user|username|admin|root):(?:pass|password|passwd|secret|changeme|x{3,})@)"))
 
   (def pat-basic-auth-url
     (make-secret-pattern
       'basic-auth-url
       "Credentials in URL"
       'high
-      (pregexp "[a-z+]+://[^:@\\s]+:[^:@\\s]+@[^\\s\"']+")
-      (lambda (m) (not (pregexp-match
-                         "(?i://(?:user|username|admin|root):(?:pass|password|passwd|secret|changeme|x{3,})@)"
-                         m)))
+      (re "[a-z+]+://[^:@\\s]+:[^:@\\s]+@[^\\s\"']+")
+      (lambda (m) (not (re-search *basic-auth-placeholder-re* m)))
       "URL with embedded user:password credentials"))
 
   ;; --- MEDIUM patterns ---
@@ -297,7 +301,7 @@
       'connection-string
       "Database Connection String"
       'medium
-      (pregexp "(?i:(?:mongodb|postgres|postgresql|mysql|redis|amqp|mssql))://[^:@\\s]+:[^:@\\s]+@[^\\s\"']+")
+      (re "(?i:(?:mongodb|postgres|postgresql|mysql|redis|amqp|mssql))://[^:@\\s]+:[^:@\\s]+@[^\\s\"']+")
       #f
       "Database/broker connection string with credentials"))
 
@@ -306,7 +310,7 @@
       'high-entropy-hex
       "High-Entropy Hex String"
       'medium
-      (pregexp "[0-9a-f]{40,}")
+      (re "[0-9a-f]{40,}")
       (lambda (m) (entropy-above? m 3.0))
       "Long hex string with high entropy (possible API key or token)"))
 
@@ -315,7 +319,7 @@
       'high-entropy-base64
       "High-Entropy Base64 String"
       'medium
-      (pregexp "[A-Za-z0-9+/]{40,}={0,2}")
+      (re "[A-Za-z0-9+/]{40,}={0,2}")
       (lambda (m) (entropy-above? m 4.0))
       "Long base64 string with high entropy (possible encoded secret)"))
 

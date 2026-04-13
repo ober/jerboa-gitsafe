@@ -26,7 +26,7 @@
 
  (import (except (jerboa prelude) meta atom?)
         (std test)
-        (std pregexp)
+        (std regex)
         (gitsafe entropy)
         (gitsafe patterns)
         (gitsafe config)
@@ -102,14 +102,14 @@
       (let ([pat (car (filter (lambda (p) (eq? (secret-pattern-id p) 'aws-access-key))
                               (all-patterns)))])
         (check-predicate
-          (pregexp-match (secret-pattern-pregexp pat) "AKIAIOSFODNN7EXAMPLE!!!")
+          (re-search (secret-pattern-pregexp pat) "AKIAIOSFODNN7EXAMPLE!!!")
           (lambda (m) m))))
 
     (test-case "github-pat: detects ghp_ token"
       (let ([pat (car (filter (lambda (p) (eq? (secret-pattern-id p) 'github-pat))
                               (all-patterns)))])
         (check-predicate
-          (pregexp-match (secret-pattern-pregexp pat)
+          (re-search (secret-pattern-pregexp pat)
                          "ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef1234")
           (lambda (m) m))))
 
@@ -117,7 +117,7 @@
       (let ([pat (car (filter (lambda (p) (eq? (secret-pattern-id p) 'anthropic-api-key))
                               (all-patterns)))])
         (check-predicate
-          (pregexp-match (secret-pattern-pregexp pat)
+          (re-search (secret-pattern-pregexp pat)
                          "sk-ant-api03-ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcde")
           (lambda (m) m))))
 
@@ -125,7 +125,7 @@
       (let ([pat (car (filter (lambda (p) (eq? (secret-pattern-id p) 'jwt))
                               (all-patterns)))])
         (check-predicate
-          (pregexp-match (secret-pattern-pregexp pat)
+          (re-search (secret-pattern-pregexp pat)
                          "eyJhbGciOiJIUzI1NiJ9.eyJ1c2VyIjoiYWRtaW4ifQ.SflKxwRJSMeKKF2QT4fw")
           (lambda (m) m))))
 
@@ -133,7 +133,7 @@
       (let ([pat (car (filter (lambda (p) (eq? (secret-pattern-id p) 'stripe-secret))
                               (all-patterns)))])
         (check-predicate
-          (pregexp-match (secret-pattern-pregexp pat)
+          (re-search (secret-pattern-pregexp pat)
                          "sk_live_ABCDEFGHIJKLMNOPQRSTUVWXYZabc")
           (lambda (m) m))))
 
@@ -141,7 +141,7 @@
       (let ([pat (car (filter (lambda (p) (eq? (secret-pattern-id p) 'private-key-pem))
                               (all-patterns)))])
         (check-predicate
-          (pregexp-match (secret-pattern-pregexp pat)
+          (re-search (secret-pattern-pregexp pat)
                          "-----BEGIN OPENSSH PRIVATE KEY-----")
           (lambda (m) m))))
 
@@ -149,7 +149,7 @@
       (let ([pat (car (filter (lambda (p) (eq? (secret-pattern-id p) 'private-key-pem))
                               (all-patterns)))])
         (check-predicate
-          (pregexp-match (secret-pattern-pregexp pat)
+          (re-search (secret-pattern-pregexp pat)
                          "-----BEGIN ENCRYPTED PRIVATE KEY-----")
           (lambda (m) m))))
 
@@ -157,7 +157,7 @@
       (let ([pat (car (filter (lambda (p) (eq? (secret-pattern-id p) 'putty-private-key))
                               (all-patterns)))])
         (check-predicate
-          (pregexp-match (secret-pattern-pregexp pat)
+          (re-search (secret-pattern-pregexp pat)
                          "PuTTY-User-Key-File-3: ssh-rsa")
           (lambda (m) m))))
 
@@ -318,6 +318,27 @@
                          "api_key = os.getenv('API_KEY')\ntoken = os.environ.get('TOKEN')\n"
                          c)])
         (check-equal? '() findings)))
+
+    (test-case "scan-content: URLs in comments are not flagged as entropy secrets"
+      ;; Long URL paths match [A-Za-z0-9/]{40+} but are not secrets.
+      (let* ([c        (default-config)]
+             [findings (scan-content "dissectors/kafka.ss"
+                         ";; https://kafka.apache.org/protocol/protocol\n;; https://github.com/couchbase/couchbase-protocol\n;; https://en.wikipedia.org/wiki/RTTRP#History-2ddb12341234abcdef12abcd2cf5\n"
+                         c)])
+        (check-equal? '() (filter (lambda (f)
+                                    (member (finding-pattern-id f)
+                                            '(high-entropy-base64 high-entropy-hex)))
+                                  findings))))
+
+    (test-case "scan-content: false-positives fixture produces no entropy findings"
+      (let* ([c        (default-config)]
+             [content  (read-file-string "test/fixtures/false-positives.txt")]
+             [findings (scan-content "false-positives.txt" content c)]
+             [entropy-findings (filter (lambda (f)
+                                         (member (finding-pattern-id f)
+                                                 '(high-entropy-base64 high-entropy-hex)))
+                                       findings)])
+        (check-equal? '() entropy-findings)))
 
   ))
 
