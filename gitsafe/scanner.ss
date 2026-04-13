@@ -230,22 +230,34 @@
   (def (scan-staged config)
     (let ([files (staged-files)]
           [ignore-pats (load-ignorefile)])
-      (pmap-files
-        (lambda (path)
-          (cond
-            [(skip-file? path config) '()]
-            [(ignored-file? path ignore-pats) '()]
-            [else
-             (let ([hunks (staged-diff path)])
-               (if (null? hunks)
-                 ;; New file — scan full staged content
-                 (let ([content (staged-content path)])
-                   (if (string-empty? content)
-                     '()
-                     (scan-content path content config)))
-                 ;; Modified file — scan only added lines
-                 (scan-diff-hunks hunks config)))]))
-        files)))
+      ;; Phase 1: collect git data sequentially to avoid index lock contention
+      ;; when many files are staged (parallel git processes fight over the lock).
+      (let ([work-items
+             (filter-map
+               (lambda (path)
+                 (cond
+                   [(skip-file? path config) #f]
+                   [(ignored-file? path ignore-pats) #f]
+                   [else
+                    (let ([hunks (staged-diff path)])
+                      (if (null? hunks)
+                        ;; New file — read full staged content
+                        (let ([content (staged-content path)])
+                          (if (string-empty? content)
+                            #f
+                            (list path 'content content)))
+                        ;; Modified file — keep diff hunks
+                        (list path 'hunks hunks)))]))
+               files)])
+        ;; Phase 2: scan in parallel (CPU-bound regex work, no git I/O)
+        (pmap-files
+          (lambda (item)
+            (match item
+              [(list path 'content content)
+               (scan-content path content config)]
+              [(list path 'hunks hunks)
+               (scan-diff-hunks hunks config)]))
+          work-items))))
 
   ;; --- Top-level: scan push range ---
   (def (scan-push-range local-ref remote-ref config)
@@ -255,18 +267,29 @@
         '()
         ;; Scan diff of the entire range
         (let ([files (changed-files-in-range remote-ref local-ref)])
-          (pmap-files
-            (lambda (path)
-              (cond
-                [(skip-file? path config) '()]
-                [(ignored-file? path ignore-pats) '()]
-                [else
-                 (let ([diff-text (range-diff remote-ref local-ref path)])
-                   (let ([hunks (if (string-empty? diff-text)
-                                  '()
-                                  (parse-unified-diff-text diff-text path))])
-                     (scan-diff-hunks hunks config)))]))
-            files)))))
+          ;; Phase 1: collect git diffs sequentially
+          (let ([work-items
+                 (filter-map
+                   (lambda (path)
+                     (cond
+                       [(skip-file? path config) #f]
+                       [(ignored-file? path ignore-pats) #f]
+                       [else
+                        (let ([diff-text (range-diff remote-ref local-ref path)])
+                          (if (string-empty? diff-text)
+                            #f
+                            (let ([hunks (parse-unified-diff-text diff-text path)])
+                              (if (null? hunks)
+                                #f
+                                (list path hunks)))))]))
+                   files)])
+            ;; Phase 2: scan in parallel
+            (pmap-files
+              (lambda (item)
+                (match item
+                  [(list path hunks)
+                   (scan-diff-hunks hunks config)]))
+              work-items))))))
 
   ;; Helper: expose parse for push range use
   (def (parse-unified-diff-text text file)
