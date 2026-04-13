@@ -29,7 +29,7 @@
     (library-directories)))
 
 ;; --- Now we can import gitsafe modules ---
-(import (jerboa prelude)
+ (import (except (jerboa prelude) meta atom?)
         (std misc process)
         (std misc ports)
         (gitsafe config)

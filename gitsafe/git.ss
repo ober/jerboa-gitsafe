@@ -23,7 +23,7 @@
                   iota 1+ 1-
                   partition
                   make-date make-time)
-          (jerboa prelude)
+           (except (jerboa prelude) meta atom?)
           (std pregexp)
           (std misc process)
           (std misc string)

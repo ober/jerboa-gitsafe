@@ -24,7 +24,7 @@
                 (string-append jerboa-dir "/lib")))
     (library-directories)))
 
-(import (jerboa prelude)
+ (import (except (jerboa prelude) meta atom?)
         (std test)
         (std pregexp)
         (gitsafe entropy)

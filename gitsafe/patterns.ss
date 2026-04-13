@@ -19,7 +19,7 @@
                   iota 1+ 1-
                   partition
                   make-date make-time)
-          (jerboa prelude)
+           (except (jerboa prelude) meta atom?)
           (std pregexp))
 
   ;; --- Secret pattern struct ---
